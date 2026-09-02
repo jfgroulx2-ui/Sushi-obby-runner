@@ -92,6 +92,9 @@
   }
   #btnDuck { left: 22px; background: #2F6FD6; box-shadow: 0 6px 0 #17418F; }
   #btnJump { right: 22px; background: var(--salmon); box-shadow: 0 6px 0 #B8402F; }
+  .pad.small { width: 86px; height: 86px; bottom: 150px; font-size: 17px; }
+  #btnSlow { left: 38px; background: #5FB4F0; box-shadow: 0 6px 0 #2F6FD6; color: #071A3F; }
+  #btnFast { right: 38px; background: #FFE066; box-shadow: 0 6px 0 #C9A400; color: #071A3F; }
   .pad.down { transform: translateY(4px); box-shadow: none; opacity: 1; }
   @media (hover: hover) and (pointer: fine) { #touch { display: none; } }
 
@@ -115,7 +118,7 @@
       <button class="card" id="pickNinja"><canvas width="180" height="150"></canvas>Chubby Ninja<span>Ate way too much sushi</span></button>
       <button class="card" id="pickTiger"><canvas width="180" height="150"></canvas>Wasabi Tiger<span>Ate way too much wasabi</span></button>
     </div>
-    <p class="hint">Keyboard: Space or ↑ to jump (twice for a double jump), ↓ to duck. On touch: use the two big buttons.</p>
+    <p class="hint">Keyboard: Space or ↑ to jump (twice for a double jump), ↓ to duck, hold ← to slow down or → to speed up. On touch: use the buttons.</p>
   </div>
 
   <div id="over" class="screen hidden">
@@ -129,6 +132,8 @@
   </div>
 
   <div id="touch" class="hidden">
+    <button class="pad small" id="btnSlow" aria-label="Slow down">Slow</button>
+    <button class="pad small" id="btnFast" aria-label="Speed up">Fast</button>
     <button class="pad" id="btnDuck" aria-label="Duck">Duck</button>
     <button class="pad" id="btnJump" aria-label="Jump">Jump</button>
   </div>
@@ -171,7 +176,31 @@ function beep(freq, dur, type = 'square', vol = .08, slide = 0) {
     o.start(); o.stop(audio.currentTime + dur);
   } catch (e) {}
 }
+function noise(dur, vol = .1, freq = 1200, q = 1) {
+  try {
+    if (!audio) audio = new (window.AudioContext || window.webkitAudioContext)();
+    const n = Math.floor(audio.sampleRate * dur), buf = audio.createBuffer(1, n, audio.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = audio.createBufferSource(); src.buffer = buf;
+    const f = audio.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q;
+    const g = audio.createGain(); g.gain.value = vol; g.gain.exponentialRampToValueAtTime(.001, audio.currentTime + dur);
+    src.connect(f); f.connect(g); g.connect(audio.destination); src.start();
+  } catch (e) {}
+}
 const sfx = {
+  duck: () => noise(.12, .08, 900, .7),
+  land: () => { noise(.06, .07, 300, .8); beep(120, .06, 'sine', .05); },
+  step: () => noise(.03, .025, 500, 1),
+  thunk: () => { beep(90, .12, 'square', .1, -40); noise(.1, .1, 400, .8); },
+  growl: () => { beep(110, .3, 'sawtooth', .07, -30); noise(.25, .05, 250, .6); },
+  hiss: () => noise(.35, .09, 5000, .4),
+  fall: () => beep(700, .5, 'sawtooth', .07, -600),
+  edamame: () => { beep(660, .07, 'square', .06); setTimeout(() => beep(990, .09, 'square', .06), 60); },
+  sashimi: () => [784, 988, 1175, 1568].forEach((f, i) => setTimeout(() => beep(f, .1, 'sine', .08), i * 55)),
+  boost: () => beep(200, .25, 'sawtooth', .05, 500),
+  brake: () => beep(500, .25, 'sawtooth', .05, -300),
+  best: () => [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => setTimeout(() => beep(f, .16, 'triangle', .09), i * 110)),
+  start: () => [392, 523, 659].forEach((f, i) => setTimeout(() => beep(f, .12, 'square', .06), i * 80)),
   jump: () => beep(420, .15, 'square', .06, 300),
   collect: () => { beep(880, .08, 'sine', .08); setTimeout(() => beep(1320, .1, 'sine', .08), 60); },
   hit: () => beep(160, .3, 'sawtooth', .1, -100),
@@ -183,21 +212,25 @@ const sfx = {
 };
 
 // ---------- Input ----------
-const input = { jumpHeld: false, jumpPressed: false, duckHeld: false };
+const input = { jumpHeld: false, jumpPressed: false, duckHeld: false, slow: false, fast: false };
 function pressJump() { if (!input.jumpHeld) input.jumpPressed = true; input.jumpHeld = true; }
 function releaseJump() { input.jumpHeld = false; }
 
 window.addEventListener('keydown', e => {
-  if (['Space', 'ArrowUp', 'KeyW', 'ArrowDown', 'KeyS'].includes(e.code)) e.preventDefault();
+  if (['Space', 'ArrowUp', 'KeyW', 'ArrowDown', 'KeyS', 'ArrowLeft', 'ArrowRight', 'KeyA', 'KeyD'].includes(e.code)) e.preventDefault();
   if (e.repeat) return;
   if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
     if (state === 'over' && overReady) restart(); else pressJump();
   }
   if (e.code === 'ArrowDown' || e.code === 'KeyS') input.duckHeld = true;
+  if (e.code === 'ArrowLeft' || e.code === 'KeyA') input.slow = true;
+  if (e.code === 'ArrowRight' || e.code === 'KeyD') input.fast = true;
 });
 window.addEventListener('keyup', e => {
   if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') releaseJump();
   if (e.code === 'ArrowDown' || e.code === 'KeyS') input.duckHeld = false;
+  if (e.code === 'ArrowLeft' || e.code === 'KeyA') input.slow = false;
+  if (e.code === 'ArrowRight' || e.code === 'KeyD') input.fast = false;
 });
 
 function bindPad(el, down, up) {
@@ -211,6 +244,8 @@ function bindPad(el, down, up) {
 }
 bindPad($('btnJump'), pressJump, releaseJump);
 bindPad($('btnDuck'), () => input.duckHeld = true, () => input.duckHeld = false);
+bindPad($('btnSlow'), () => input.slow = true, () => input.slow = false);
+bindPad($('btnFast'), () => input.fast = true, () => input.fast = false);
 
 // ---------- Characters ----------
 function drawNinja(g, x, y, w, h, t, ducking) {
@@ -320,28 +355,29 @@ let charKey = 'ninja';
 let best = 0;
 try { best = Number(localStorage.getItem('sushi-obby-mayhem-best') || 0); } catch (e) {}
 
-const p = { x: 170, y: GROUND, vy: 0, w: 58, h: 76, duck: false, grounded: true, jumps: 0, inv: 0, onRamp: null, star: 0 };
+const p = { x: 170, y: GROUND, vy: 0, w: 58, h: 76, duck: false, grounded: true, jumps: 0, inv: 0, onRamp: null, star: 0, rush: 0 };
 let obstacles = [], bottles = [], particles = [], clouds = [];
 let speed = 6, dist = 0, score = 0, hearts = 3, frame = 0, spawnX = W + 300, shake = 0, overTimer = 0;
 let stage = 1, stageFlash = 0;
+let speedMul = 1, lastType = '', rampFrom = 0;
 const STAGE2_AT = 100;
 
 function resetRun() {
   Object.assign(p, { y: GROUND, vy: 0, h: 76, duck: false, grounded: true, jumps: 0, inv: 0, onRamp: null });
   obstacles = []; bottles = []; particles = [];
-  speed = 6; dist = 0; score = 0; hearts = 3; frame = 0; spawnX = W + 400; shake = 0; overTimer = 0; stage = 1; stageFlash = 0; p.star = 0;
+  speed = 6; dist = 0; score = 0; hearts = 3; frame = 0; spawnX = W + 400; shake = 0; overTimer = 0; stage = 1; stageFlash = 0; p.star = 0; p.rush = 0; speedMul = 1; lastType = ''; rampFrom = 0;
   input.jumpPressed = false;
 }
 function startGame(key) {
   charKey = key; resetRun(); state = 'play'; overReady = false;
   $('menu').classList.add('hidden'); $('over').classList.add('hidden'); $('touch').classList.remove('hidden');
-  beep(660, .1, 'sine', .05);
+  sfx.start();
 }
 function restart() { startGame(charKey); }
 function gameOver() {
   state = 'over'; overReady = false;
   $('finalScore').textContent = score;
-  if (score > best) { best = score; try { localStorage.setItem('sushi-obby-mayhem-best', best); } catch (e) {} $('bestLine').textContent = 'New best score!'; }
+  if (score > best) { best = score; try { localStorage.setItem('sushi-obby-mayhem-best', best); } catch (e) {} $('bestLine').textContent = 'New best score!'; setTimeout(sfx.best, 1100); }
   else $('bestLine').textContent = 'Best so far: ' + best;
   $('over').classList.remove('hidden'); $('touch').classList.add('hidden');
   sfx.over();
@@ -371,7 +407,7 @@ for (let i = 0; i < 6; i++) clouds.push({ x: Math.random() * W, y: 40 + Math.ran
 function rnd(a, b) { return a + Math.random() * (b - a); }
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
-const ITEM = { bottle: { v: 1 }, edamame: { v: 2 }, sashimi: { v: 5 }, star: { v: 0 } };
+const ITEM = { bottle: { v: 1 }, edamame: { v: 1 }, sashimi: { v: 5 }, star: { v: 0 }, wasabi: { v: 0 } };
 function spawnBottleArc(x, y, n, spread, rise, kind = 'bottle') {
   for (let i = 0; i < n; i++) {
     const t = n === 1 ? .5 : i / (n - 1);
@@ -385,12 +421,20 @@ function spawn() {
   const x = W + 120;
   const easy = dist < 2500;
   const types = stage === 2
-    ? ['bamboo', 'bamboo', 'blind', 'blind', 'tempura', 'knife', 'ramen', 'bottles', 'bottles', 'snake', 'snake']
-    : easy ? ['sushi', 'sushi', 'tempura', 'ramen', 'bottles'] : ['sushi', 'sushi', 'tempura', 'knife', 'seaweed', 'ramen', 'bottles', 'seaweed', 'knife', 'chef', 'chef'];
-  const type = pick(types);
+    ? ['bamboo', 'bamboo', 'blind', 'blind', 'tempura', 'knife', 'ramen', 'bottles', 'bottles', 'snake', 'snake', 'pit', 'pit']
+    : easy ? ['sushi', 'sushi', 'tempura', 'ramen', 'bottles', 'pit'] : ['sushi', 'sushi', 'tempura', 'knife', 'seaweed', 'ramen', 'bottles', 'seaweed', 'knife', 'chef', 'chef', 'pit', 'pit'];
+  let type = pick(types);
+  // never put a rusher right behind a duck-under obstacle, and never two rushers in a row
+  const duckers = ['seaweed', 'blind'], rushers = ['chef', 'snake'];
+  if (rushers.includes(type) && (duckers.includes(lastType) || rushers.includes(lastType))) type = stage === 2 ? 'bamboo' : 'sushi';
+  if (duckers.includes(type) && duckers.includes(lastType)) type = 'bottles';
+  lastType = type;
   // rare power star, floating high between obstacles
   if (dist > 1500 && Math.random() < .07) bottles.push({ x: x - 200, y: GROUND - 200, taken: false, bob: 0, kind: 'star' });
-  let gap = rnd(380, 560);
+  // wasabi star: a green trap that speeds everything up for 4 seconds
+  if (dist > 2500 && Math.random() < .08) bottles.push({ x: x - 220, y: GROUND - rnd(60, 150), taken: false, bob: 0, kind: 'wasabi' });
+  // gaps grow with the base speed so reaction time stays roughly constant
+  let gap = rnd(380, 560) * (0.75 + (6 + Math.min(6.5, (dist - rampFrom) / 4500)) / 20);
   switch (type) {
     case 'sushi': {
       const n = easy || Math.random() < .5 ? 1 : 2;
@@ -405,7 +449,7 @@ function spawn() {
       break;
     case 'knife':
       obstacles.push({ type, x, w: 24, h: 96, y: -120, vy: 0, phase: 'hang' });
-      gap += 80;
+      gap += 120;
       break;
     case 'seaweed':
       obstacles.push({ type, x, w: 66, h: GROUND - 62 });
@@ -421,6 +465,13 @@ function spawn() {
       obstacles.push({ type, x, w: 62, h: 92, vx: 1.8 + Math.random() * 1.4 });
       gap += 140;
       break;
+    case 'pit': {
+      const w = easy ? 110 : rnd(120, 175);
+      obstacles.push({ type, x, w, h: 0, spikes: Math.round(w / 22) });
+      if (Math.random() < .6) spawnBottleArc(x - 30, GROUND - 90, 4, w + 60, 60, bonusKind());
+      gap += 60;
+      break;
+    }
     case 'snake':
       obstacles.push({ type, x, w: 84, h: 38, vx: 2.6 + Math.random() * 1.6 });
       gap += 160;
@@ -451,14 +502,22 @@ function rectsHit(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y
 
 function update(dt) {
   frame += dt;
-  speed = 6 + Math.min(6.5, dist / 4500);
+  if (p.rush > 0) p.rush -= dt;
+  const target = p.rush > 0 ? 1.8 : input.fast ? 1.55 : input.slow ? .5 : 1;
+  speedMul += (target - speedMul) * Math.min(1, .12 * dt);
+  const base = 6 + Math.min(6.5, (dist - rampFrom) / 4500);
+  speed = base * speedMul;
   dist += speed * dt;
   spawnX -= speed * dt;
   if (spawnX < W + 120) spawn();
   clouds.forEach(c => { c.x -= c.v * speed * dt * .25; if (c.x < -120) { c.x = W + 120; c.y = 40 + Math.random() * 160; } });
 
   // ducking
+  if (input.duckHeld && !p.duck) sfx.duck();
   p.duck = input.duckHeld;
+  if (input.fast && !p.wasFast) sfx.boost(); if (input.slow && !p.wasSlow) sfx.brake();
+  p.wasFast = input.fast; p.wasSlow = input.slow;
+  if (p.grounded && !p.duck && Math.floor(frame / 9) !== Math.floor((frame - dt) / 9)) sfx.step();
   const targetH = p.duck ? 42 : 76;
   p.h = targetH;
   if (p.duck && !p.grounded) p.vy += .5 * dt; // fast fall
@@ -478,21 +537,21 @@ function update(dt) {
 
   p.vy += .62 * dt;
   p.y += p.vy * dt;
-  const wasOnRamp = p.onRamp;
+  const wasOnRamp = p.onRamp, wasAir = !p.grounded;
   p.grounded = false;
-  if (p.y >= GROUND) { p.y = GROUND; p.vy = 0; p.grounded = true; p.jumps = 0; }
+  if (p.y >= GROUND) { p.y = GROUND; p.vy = 0; p.grounded = true; p.jumps = 0; if (wasAir) sfx.land(); }
   p.onRamp = null;
 
   // obstacles
   for (const o of obstacles) {
     o.x -= speed * dt;
-    if (o.type === 'chef' || o.type === 'snake') o.x -= o.vx * dt;
+    if (o.type === 'chef' || o.type === 'snake') { o.x -= o.vx * dt; if (!o.yelled && o.x < W - 40) { o.yelled = true; (o.type === 'chef' ? sfx.growl : sfx.hiss)(); } }
     if (o.type === 'knife') {
-      if (o.phase === 'hang' && o.x - p.x < 520) o.phase = 'fall';
+      if (o.phase === 'hang' && o.x - p.x < 480 + speed * 20) o.phase = 'fall';
       if (o.phase === 'fall') {
         o.vy += .95 * dt; o.y += o.vy * dt;
         if (o.y + o.h >= GROUND + 6) {
-          o.y = GROUND + 6 - o.h; o.phase = 'stuck'; shake = Math.max(shake, 4);
+          o.y = GROUND + 6 - o.h; o.phase = 'stuck'; shake = Math.max(shake, 4); sfx.thunk();
           for (let i = 0; i < 8; i++) particles.push({ x: o.x + 12, y: GROUND, vx: rnd(-3, 3), vy: rnd(-4, -1), life: 25, col: C.mat2, r: 3 });
         }
       }
@@ -523,6 +582,16 @@ function update(dt) {
     if (o.type === 'ramen') continue;
     if (o.type === 'knife') { if (o.phase === 'hang') continue; box = { x: o.x + 4, y: o.y, w: o.w - 8, h: o.h }; }
     else if (o.type === 'seaweed' || o.type === 'blind') box = { x: o.x + 6, y: 0, w: o.w - 12, h: o.h };
+    else if (o.type === 'pit') {
+      box = { x: o.x + 14, y: GROUND - 1, w: o.w - 28, h: 40 };
+      if (rectsHit(hb, box) && p.inv <= 0) {
+        // fell in: lose a heart and get popped back out
+        hearts--; p.inv = 100; shake = 8; p.vy = -11; p.grounded = false; p.jumps = 1; sfx.fall(); setTimeout(sfx.hit, 250);
+        for (let i = 0; i < 10; i++) particles.push({ x: p.x, y: GROUND, vx: rnd(-4, 4), vy: rnd(-5, -1), life: 30, col: pick([C.steel, '#fff']), r: 3 });
+        if (hearts <= 0) overTimer = 45;
+      }
+      continue;
+    }
     else box = { x: o.x + 6, y: GROUND - o.h + 6, w: o.w - 12, h: o.h - 6 };
     if (p.star > 0 && rectsHit(hb, box)) {
       // star power: smash through anything
@@ -551,15 +620,23 @@ function update(dt) {
     b.x -= speed * dt;
     if (!b.taken && Math.hypot(b.x - p.x, b.y - (p.y - p.h / 2)) < 34 + p.h / 4) {
       b.taken = true;
-      if (b.kind === 'star') {
+      if (b.kind === 'wasabi') {
+        p.rush = 240; sfx.boost(); shake = Math.max(shake, 5);
+        for (let i = 0; i < 20; i++) particles.push({ x: b.x, y: b.y, vx: rnd(-5, 5), vy: rnd(-6, 2), life: 40, col: C.wasabi, r: 4 });
+        particles.push({ x: b.x, y: b.y - 10, vx: 0, vy: -1.5, life: 60, col: C.wasabi, text: 'WASABI RUSH!' });
+      } else if (b.kind === 'star') {
         p.star = 240; sfx.star();
         for (let i = 0; i < 20; i++) particles.push({ x: b.x, y: b.y, vx: rnd(-5, 5), vy: rnd(-6, 2), life: 40, col: '#FFE066', r: 4 });
         particles.push({ x: b.x, y: b.y - 10, vx: 0, vy: -1.5, life: 60, col: '#FFE066', text: 'STAR!' });
       } else {
-        const v = ITEM[b.kind].v; score += v; sfx.collect();
+        const v = ITEM[b.kind].v; score += v; (b.kind === 'edamame' ? sfx.edamame : b.kind === 'sashimi' ? sfx.sashimi : sfx.collect)();
         const col = b.kind === 'edamame' ? C.wasabi : b.kind === 'sashimi' ? C.salmon : C.soy;
         for (let i = 0; i < 6; i++) particles.push({ x: b.x, y: b.y, vx: rnd(-3, 3), vy: rnd(-4, 0), life: 25, col, r: 3 });
-        particles.push({ x: b.x, y: b.y - 10, vx: 0, vy: -1.5, life: 40, col: C.rice, text: '+' + v });
+        if (b.kind === 'edamame') {
+          // edamame power: the speed ramp restarts from the initial speed, and any wasabi rush ends
+          rampFrom = dist; p.rush = 0; sfx.brake();
+          particles.push({ x: b.x, y: b.y - 10, vx: 0, vy: -1.5, life: 55, col: C.wasabi, text: 'SPEED RESET' });
+        } else particles.push({ x: b.x, y: b.y - 10, vx: 0, vy: -1.5, life: 40, col: C.rice, text: '+' + v });
       }
     }
   }
@@ -664,7 +741,7 @@ function drawForest(g) {
   }
   // misty hills
   const hoff = (dist * .1) % 500;
-  g.fillStyle = '#A9D9C6';
+  g.fillStyle = '#CFE9E0';
   g.beginPath(); g.moveTo(0, GROUND);
   for (let x = -hoff; x < W + 500; x += 500) { g.quadraticCurveTo(x + 125, GROUND - 200, x + 250, GROUND - 90); g.quadraticCurveTo(x + 375, GROUND - 170, x + 500, GROUND - 80); }
   g.lineTo(W, GROUND); g.fill();
@@ -672,30 +749,32 @@ function drawForest(g) {
   const goff = (dist * .3) % groveW;
   for (const b of grove) for (const k of [0, 1]) {
     const bx = b.x - goff + k * groveW; if (bx > W || bx + b.w < 0) continue;
-    g.fillStyle = ['#7FBF6A', '#6BAF58', '#93CC7C'][b.tone];
+    g.fillStyle = ['#C3E3B4', '#B4DAA3', '#D2EBC5'][b.tone];
     g.fillRect(bx, GROUND - 60 - b.h, b.w, b.h + 60);
-    g.fillStyle = 'rgba(0,0,0,.12)';
+    g.fillStyle = 'rgba(0,0,0,.06)';
     for (let y = GROUND - 60 - b.h + 30; y < GROUND - 60; y += 46) g.fillRect(bx, y, b.w, 3);
-    g.fillStyle = ['#7FBF6A', '#6BAF58', '#93CC7C'][b.tone];
+    g.fillStyle = ['#C3E3B4', '#B4DAA3', '#D2EBC5'][b.tone];
     for (let y = GROUND - 60 - b.h + 50; y < GROUND - 120; y += 92) { g.beginPath(); g.ellipse(bx + b.w + 16, y, 18, 5, -.5, 0, Math.PI * 2); g.fill(); }
   }
-  // pandas, stuffed with sushi (mid layer)
-  const poff = (dist * .6) % pandaW;
+  // pandas, stuffed with sushi — soft and misty so they never look like obstacles
+  const poff = (dist * .45) % pandaW;
+  g.globalAlpha = .5;
   for (const pd of pandas) for (const k of [0, 1]) {
     const px = pd.x - poff + k * pandaW; if (px > W + 100 || px < -100) continue;
-    drawPanda(g, px, GROUND - 40, pd);
+    drawPanda(g, px, GROUND - 60, pd);
   }
-  // near bamboo stalks
-  const noff = (dist * .8) % 1100;
-  g.fillStyle = '#4E9A45';
-  for (let x = -noff; x < W + 1100; x += 1100) { g.fillRect(x + 60, 0, 22, GROUND - 30); g.fillRect(x + 640, 0, 18, GROUND - 30); g.fillStyle = 'rgba(0,0,0,.15)'; for (let y = 40; y < GROUND; y += 70) { g.fillRect(x + 60, y, 22, 4); g.fillRect(x + 640, y, 18, 4); } g.fillStyle = '#4E9A45'; }
-  // mossy ground
-  g.fillStyle = '#5C8F3A'; g.fillRect(0, GROUND - 14, W, 14);
-  g.fillStyle = '#7CC46B'; g.fillRect(0, GROUND, W, H - GROUND);
-  g.fillStyle = '#6AB35A';
+  g.globalAlpha = 1;
+  // haze band so the play lane pops
+  const haze = g.createLinearGradient(0, GROUND - 200, 0, GROUND);
+  haze.addColorStop(0, 'rgba(240,250,236,0)'); haze.addColorStop(1, 'rgba(240,250,236,.75)');
+  g.fillStyle = haze; g.fillRect(0, GROUND - 200, W, 200);
+  // pale ground with a dark edge line
+  g.fillStyle = '#3F6B2A'; g.fillRect(0, GROUND - 14, W, 14);
+  g.fillStyle = '#7FB86A'; g.fillRect(0, GROUND - 10, W, 4);
+  g.fillStyle = '#D9EFC4'; g.fillRect(0, GROUND, W, H - GROUND);
+  g.fillStyle = '#C4E3AA';
   const o2 = dist % 64;
   for (let x = -o2; x < W; x += 64) { g.beginPath(); g.ellipse(x + 20, GROUND + 30, 22, 8, 0, 0, Math.PI * 2); g.fill(); g.fillRect(x + 40, GROUND + 60, 30, 5); }
-  g.fillStyle = '#A6D45C'; for (let x = -o2; x < W; x += 64) { g.fillRect(x + 4, GROUND - 22, 3, 10); g.fillRect(x + 10, GROUND - 18, 3, 6); }
 }
 function drawPanda(g, x, y, pd) {
   const d = pd.flip ? -1 : 1;
@@ -811,14 +890,15 @@ function drawObstacle(g, o) {
     }
     case 'snake': {
       const y = GROUND, t = frame * .5;
-      g.strokeStyle = '#3E9B4F'; g.lineWidth = 16; g.lineCap = 'round'; g.lineJoin = 'round';
-      g.beginPath();
-      for (let i = 0; i <= 6; i++) { const sx = o.x + o.w - i * 12, sy = y - 12 - Math.sin(t + i * .9) * 6; if (i === 0) g.moveTo(sx, sy); else g.lineTo(sx, sy); }
-      g.stroke();
-      g.strokeStyle = '#A6D45C'; g.lineWidth = 5;
+      const body = () => { g.beginPath(); for (let i = 0; i <= 6; i++) { const sx = o.x + o.w - i * 12, sy = y - 12 - Math.sin(t + i * .9) * 6; if (i === 0) g.moveTo(sx, sy); else g.lineTo(sx, sy); } g.stroke(); };
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      g.strokeStyle = '#0E2A14'; g.lineWidth = 22; body();
+      g.strokeStyle = '#1F6B2E'; g.lineWidth = 16; body();
+      g.strokeStyle = '#FFE066'; g.lineWidth = 5;
       g.beginPath(); for (let i = 0; i <= 6; i++) { const sx = o.x + o.w - i * 12, sy = y - 16 - Math.sin(t + i * .9) * 6; if (i === 0) g.moveTo(sx, sy); else g.lineTo(sx, sy); } g.stroke();
       // head
-      g.fillStyle = '#3E9B4F'; g.beginPath(); g.ellipse(o.x + 14, y - 18, 18, 13, 0, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#0E2A14'; g.beginPath(); g.ellipse(o.x + 14, y - 18, 21, 16, 0, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#1F6B2E'; g.beginPath(); g.ellipse(o.x + 14, y - 18, 18, 13, 0, 0, Math.PI * 2); g.fill();
       g.fillStyle = '#FFE066'; g.beginPath(); g.ellipse(o.x + 8, y - 24, 5, 5, 0, 0, Math.PI * 2); g.fill();
       g.fillStyle = C.soy; g.fillRect(o.x + 6, y - 29, 3, 9);
       g.strokeStyle = C.soy; g.lineWidth = 3; g.beginPath(); g.moveTo(o.x + 2, y - 33); g.lineTo(o.x + 14, y - 28); g.stroke();
@@ -832,23 +912,42 @@ function drawObstacle(g, o) {
         const cnt = o.n - r, y = GROUND - 13 - r * 24, x0 = o.x + (o.w - cnt * 26) / 2 + 13;
         for (let i = 0; i < cnt; i++) {
           const cx = x0 + i * 26;
-          g.fillStyle = '#8FC96A'; g.beginPath(); g.roundRect(cx - 12, y - 12, 24, 24, 6); g.fill();
-          g.fillStyle = '#4E9A45'; g.fillRect(cx - 12, y - 3, 24, 4);
-          g.fillStyle = '#D7EFC2'; g.beginPath(); g.arc(cx - 4, y - 5, 3, 0, Math.PI * 2); g.fill();
+          g.fillStyle = '#4A3410'; g.beginPath(); g.roundRect(cx - 14, y - 14, 28, 28, 7); g.fill();
+          g.fillStyle = '#D9A84A'; g.beginPath(); g.roundRect(cx - 12, y - 12, 24, 24, 6); g.fill();
+          g.fillStyle = '#8A5A1E'; g.fillRect(cx - 12, y - 3, 24, 4);
+          g.fillStyle = '#FFF0C2'; g.beginPath(); g.arc(cx - 4, y - 5, 3, 0, Math.PI * 2); g.fill();
         }
       }
       break;
     }
     case 'blind': {
       // hanging bamboo blind (sudare) — duck under it
-      g.fillStyle = '#4E9A45'; g.fillRect(o.x - 6, 0, o.w + 12, 14);
+      g.fillStyle = '#4A3410'; g.fillRect(o.x - 8, 0, o.w + 16, 16);
+      g.fillStyle = '#3F6B2A'; g.fillRect(o.x - 6, 0, o.w + 12, 12);
+      g.fillStyle = '#4A3410'; g.fillRect(o.x - 3, 14, o.w + 6, o.h - 12);
       for (let y = 14; y < o.h - 4; y += 12) {
-        g.fillStyle = y % 24 ? '#C8B36A' : '#B49E58';
+        g.fillStyle = y % 24 ? '#B98F3A' : '#9C7530';
         const sway = Math.sin(frame * .06 + y * .05) * 3;
         g.fillRect(o.x + sway, y, o.w, 9);
       }
       g.strokeStyle = C.soy; g.lineWidth = 2;
       g.beginPath(); g.moveTo(o.x + 14, 14); g.lineTo(o.x + 14, o.h); g.moveTo(o.x + o.w - 14, 14); g.lineTo(o.x + o.w - 14, o.h); g.stroke();
+      break;
+    }
+    case 'pit': {
+      // hole in the ground with spikes at the bottom
+      const depth = 44;
+      g.fillStyle = stage === 2 ? '#2F5A22' : '#0B2A5B'; g.fillRect(o.x, GROUND - 14, o.w, H - GROUND + 14);
+      g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(o.x, GROUND - 14, o.w, 12);
+      const spikeCol = stage === 2 ? '#C8B36A' : C.steel, tip = stage === 2 ? '#8A7A3A' : '#8FA0AE';
+      for (let i = 0; i < o.spikes; i++) {
+        const sx = o.x + 4 + i * ((o.w - 8) / o.spikes), sw = (o.w - 8) / o.spikes;
+        g.fillStyle = spikeCol; g.beginPath(); g.moveTo(sx, H); g.lineTo(sx + sw / 2, GROUND + depth - 26); g.lineTo(sx + sw, H); g.fill();
+        g.fillStyle = tip; g.beginPath(); g.moveTo(sx + sw / 2 - 3, GROUND + depth - 14); g.lineTo(sx + sw / 2, GROUND + depth - 26); g.lineTo(sx + sw / 2 + 3, GROUND + depth - 14); g.fill();
+      }
+      // rim
+      g.fillStyle = stage === 2 ? '#5C8F3A' : '#2F6FD6'; g.fillRect(o.x - 6, GROUND - 14, 6, 14); g.fillRect(o.x + o.w, GROUND - 14, 6, 14);
+      g.fillStyle = C.tuna; for (let i = 0; i < 3; i++) g.fillRect(o.x + 10 + i * ((o.w - 20) / 2) - 3, GROUND - 22, 6, 6);
       break;
     }
     case 'ramen': {
@@ -886,23 +985,26 @@ function drawKnife(g, x, y, h, s) {
 function drawEdamame(g, b) {
   const y = b.y + Math.sin(frame * .1 + b.bob) * 3;
   g.save(); g.translate(b.x, y); g.rotate(-.5);
-  g.fillStyle = '#7CC46B'; g.beginPath(); g.roundRect(-22, -9, 44, 18, 9); g.fill();
+  g.fillStyle = '#1F4D3A'; g.beginPath(); g.roundRect(-24, -11, 48, 22, 11); g.fill();
+  g.fillStyle = '#5FAF4A'; g.beginPath(); g.roundRect(-22, -9, 44, 18, 9); g.fill();
   g.fillStyle = '#A6D45C'; for (let i = -1; i <= 1; i++) { g.beginPath(); g.arc(i * 12, 0, 6, 0, Math.PI * 2); g.fill(); }
   g.fillStyle = 'rgba(255,255,255,.4)'; g.fillRect(-18, -6, 30, 3);
   g.restore();
 }
 function drawSashimi(g, b) {
   const y = b.y + Math.sin(frame * .1 + b.bob) * 3;
+  g.fillStyle = C.deep; g.beginPath(); g.ellipse(b.x, y + 8, 26, 10, 0, 0, Math.PI * 2); g.fill();
   g.fillStyle = '#F2F2F2'; g.beginPath(); g.ellipse(b.x, y + 8, 24, 8, 0, 0, Math.PI * 2); g.fill();
   g.fillStyle = C.salmon; g.beginPath(); g.roundRect(b.x - 18, y - 12, 36, 20, [4, 14, 4, 14]); g.fill();
   g.fillStyle = 'rgba(255,255,255,.55)'; for (let i = 0; i < 3; i++) g.fillRect(b.x - 12 + i * 10, y - 10, 3, 16);
   g.fillStyle = C.wasabi; g.beginPath(); g.arc(b.x + 20, y + 4, 5, 0, Math.PI * 2); g.fill();
 }
-function drawStar(g, b) {
+function drawStar(g, b, wasabi) {
   const y = b.y + Math.sin(frame * .12) * 6;
-  g.save(); g.translate(b.x, y); g.rotate(frame * .05);
-  g.fillStyle = 'rgba(255,224,102,.35)'; g.beginPath(); g.arc(0, 0, 30 + Math.sin(frame * .2) * 4, 0, Math.PI * 2); g.fill();
-  g.fillStyle = '#FFE066'; g.beginPath();
+  g.save(); g.translate(b.x, y); g.rotate(frame * (wasabi ? .12 : .05));
+  g.fillStyle = wasabi ? 'rgba(166,212,92,.4)' : 'rgba(255,224,102,.35)'; g.beginPath(); g.arc(0, 0, 30 + Math.sin(frame * .2) * 4, 0, Math.PI * 2); g.fill();
+  if (wasabi) { g.fillStyle = C.nori; g.beginPath(); for (let i = 0; i < 10; i++) { const r = i % 2 ? 12 : 26, a = i * Math.PI / 5 - Math.PI / 2; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.closePath(); g.fill(); }
+  g.fillStyle = wasabi ? C.wasabi : '#FFE066'; g.beginPath();
   for (let i = 0; i < 10; i++) { const r = i % 2 ? 9 : 22, a = i * Math.PI / 5 - Math.PI / 2; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
   g.closePath(); g.fill();
   g.fillStyle = C.soy; g.beginPath(); g.arc(-5, -2, 2, 0, Math.PI * 2); g.arc(5, -2, 2, 0, Math.PI * 2); g.fill();
@@ -913,6 +1015,7 @@ function drawBottle(g, b) {
   if (b.kind === 'edamame') return drawEdamame(g, b);
   if (b.kind === 'sashimi') return drawSashimi(g, b);
   if (b.kind === 'star') return drawStar(g, b);
+  if (b.kind === 'wasabi') return drawStar(g, b, true);
   const y = b.y + Math.sin(frame * .1 + b.bob) * 3;
   g.fillStyle = C.soy;
   g.beginPath(); g.roundRect(b.x - 11, y - 12, 22, 30, 7); g.fill();
@@ -937,6 +1040,11 @@ function drawHUD(g) {
   drawBottle(g, { x: W - 34, y: 40, bob: 0 });
   g.font = '500 18px Fredoka, sans-serif'; g.fillStyle = 'rgba(255,243,214,.8)';
   g.fillText(Math.floor(dist / 40) + ' m', W - 60, 72);
+  if (p.rush > 0) {
+    g.fillStyle = 'rgba(7,26,63,.5)'; g.beginPath(); g.roundRect(W / 2 - 110, 50, 220, 20, 10); g.fill();
+    g.fillStyle = C.wasabi; g.beginPath(); g.roundRect(W / 2 - 106, 54, 212 * (p.rush / 240), 12, 6); g.fill();
+    g.textAlign = 'center'; g.fillStyle = C.wasabi; g.font = '700 22px Fredoka, sans-serif'; g.fillText('WASABI RUSH', W / 2, 88);
+  } else if (speedMul > 1.2 || speedMul < .8) { g.textAlign = 'center'; g.fillStyle = speedMul > 1 ? '#FFE066' : C.light; g.font = '700 22px Fredoka, sans-serif'; g.fillText(speedMul > 1 ? 'FAST' : 'SLOW', W / 2, 70); }
   if (stage === 1 && score < STAGE2_AT) { g.textAlign = 'left'; g.fillText((STAGE2_AT - score) + ' more to reach the forest', 24, 72); }
   if (p.star > 0) {
     g.fillStyle = 'rgba(7,26,63,.5)'; g.beginPath(); g.roundRect(W / 2 - 110, 24, 220, 20, 10); g.fill();
@@ -948,10 +1056,15 @@ function draw() {
   ctx.save();
   if (shake > 0) ctx.translate(rnd(-shake, shake), rnd(-shake, shake));
   drawBackground(ctx);
-  const back = o => o.type === 'ramen' || o.type === 'seaweed' || o.type === 'blind';
+  const back = o => o.type === 'ramen' || o.type === 'seaweed' || o.type === 'blind' || o.type === 'pit';
   for (const o of obstacles) if (back(o)) drawObstacle(ctx, o);
   for (const b of bottles) drawBottle(ctx, b);
   for (const o of obstacles) if (!back(o)) drawObstacle(ctx, o);
+  // speed lines when boosting
+  if (speedMul > 1.2) {
+    ctx.strokeStyle = p.rush > 0 ? 'rgba(166,212,92,.8)' : 'rgba(255,255,255,.55)'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    for (let i = 0; i < 6; i++) { const ly = 60 + ((i * 73 + frame * 3) % (GROUND - 80)); const lx = ((i * 157 + frame * 40) % (W + 200)) - 100; ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(lx + 60 * speedMul, ly); ctx.stroke(); }
+  }
   // shadow
   ctx.fillStyle = 'rgba(15,46,107,.25)';
   ctx.beginPath(); ctx.ellipse(p.x, GROUND - 2, 28 * Math.max(.4, 1 - (GROUND - p.y) / 400), 6, 0, 0, Math.PI * 2); ctx.fill();
