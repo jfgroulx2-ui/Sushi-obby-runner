@@ -208,6 +208,7 @@ const sfx = {
   brake: () => beep(500, .25, 'sawtooth', .05, -300),
   best: () => [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => setTimeout(() => beep(f, .16, 'triangle', .09), i * 110)),
   start: () => [392, 523, 659].forEach((f, i) => setTimeout(() => beep(f, .12, 'square', .06), i * 80)),
+  tarot: () => [880, 1109, 1319, 1760, 2217].forEach((f, i) => setTimeout(() => beep(f, .3, 'sine', .07), i * 100)),
   jump: () => beep(420, .15, 'square', .06, 300),
   collect: () => { beep(880, .08, 'sine', .08); setTimeout(() => beep(1320, .1, 'sine', .08), 60); },
   hit: () => beep(160, .3, 'sawtooth', .1, -100),
@@ -362,22 +363,24 @@ let charKey = 'ninja';
 let best = 0;
 try { best = Number(localStorage.getItem('sushi-obby-mayhem-best') || 0); } catch (e) {}
 
-const p = { x: 170, y: GROUND, vy: 0, w: 58, h: 76, duck: false, grounded: true, jumps: 0, inv: 0, onRamp: null, star: 0, rush: 0 };
+const p = { x: 170, y: GROUND, vy: 0, w: 58, h: 76, duck: false, grounded: true, jumps: 0, inv: 0, onRamp: null, star: 0, rush: 0, prevY: GROUND };
 let obstacles = [], bottles = [], particles = [], clouds = [];
 let speed = 6, dist = 0, score = 0, hearts = 3, frame = 0, spawnX = W + 300, shake = 0, overTimer = 0;
 let stage = 1, stageFlash = 0;
 // Every category is counted; the total score is the weighted sum
-const POINTS = { bottle: 1, edamame: 1, sashimi: 5, star: 10, wasabi: 5, stomp: 3, smash: 2 };
-const LABELS = { bottle: 'Soy sauce bottles', edamame: 'Edamame', sashimi: 'Sashimi', star: 'Power stars', wasabi: 'Wasabi stars', stomp: 'Chefs & snakes bonked', smash: 'Things smashed' };
+const POINTS = { bottle: 1, edamame: 1, sashimi: 5, star: 10, wasabi: 5, stomp: 3, smash: 2, tarot: 0 };
+function multiplier() { return Math.pow(2, tally.tarot || 0); }
+function finalScore() { return score * multiplier(); }
+const LABELS = { bottle: 'Soy sauce bottles', edamame: 'Edamame', sashimi: 'Sashimi', star: 'Power stars', wasabi: 'Wasabi stars', stomp: 'Chefs & snakes bonked', smash: 'Things smashed', tarot: 'Tarot cards' };
 let tally = {};
 function addScore(kind) { tally[kind] = (tally[kind] || 0) + 1; score += POINTS[kind]; return POINTS[kind]; }
-let speedMul = 1, lastType = '', rampFrom = 0;
+let speedMul = 1, lastType = '', rampFrom = 0, lastWasabi = -1e9, lastEdamame = -1e9, lastPit = -1e9, lastTarot = -1e9;
 const STAGE2_AT = 100;
 
 function resetRun() {
   Object.assign(p, { y: GROUND, vy: 0, h: 76, duck: false, grounded: true, jumps: 0, inv: 0, onRamp: null });
   obstacles = []; bottles = []; particles = [];
-  speed = 6; dist = 0; score = 0; hearts = 3; frame = 0; spawnX = W + 400; shake = 0; overTimer = 0; stage = 1; stageFlash = 0; p.star = 0; p.rush = 0; tally = {}; speedMul = 1; lastType = ''; rampFrom = 0;
+  speed = 6; dist = 0; score = 0; hearts = 3; frame = 0; spawnX = W + 400; shake = 0; overTimer = 0; stage = 1; stageFlash = 0; p.star = 0; p.rush = 0; tally = {}; speedMul = 1; lastType = ''; rampFrom = 0; lastWasabi = -1e9; lastEdamame = -1e9; lastPit = -1e9; lastTarot = -1e9;
   input.jumpPressed = false;
 }
 function startGame(key) {
@@ -388,10 +391,12 @@ function startGame(key) {
 function restart() { startGame(charKey); }
 function gameOver() {
   state = 'over'; overReady = false;
-  $('finalScore').textContent = score;
-  const rows = Object.keys(POINTS).filter(k => tally[k]).map(k => '<tr><td>' + LABELS[k] + '</td><td>' + tally[k] + ' × ' + POINTS[k] + '</td><td>' + tally[k] * POINTS[k] + '</td></tr>').join('');
-  $('tallyTable').innerHTML = (rows || '<tr><td colspan="3">Nothing collected this time!</td></tr>') + '<tr class="total"><td>Total</td><td></td><td>' + score + '</td></tr>';
-  if (score > best) { best = score; try { localStorage.setItem('sushi-obby-mayhem-best', best); } catch (e) {} $('bestLine').textContent = 'New best score!'; setTimeout(sfx.best, 1100); }
+  const total = finalScore();
+  $('finalScore').textContent = total;
+  const rows = Object.keys(POINTS).filter(k => tally[k] && k !== 'tarot').map(k => '<tr><td>' + LABELS[k] + '</td><td>' + tally[k] + ' × ' + POINTS[k] + '</td><td>' + tally[k] * POINTS[k] + '</td></tr>').join('');
+  const tarotRow = tally.tarot ? '<tr><td>Tarot cards</td><td>' + tally.tarot + '</td><td>×' + multiplier() + '</td></tr>' : '';
+  $('tallyTable').innerHTML = (rows || '<tr><td colspan="3">Nothing collected this time!</td></tr>') + tarotRow + '<tr class="total"><td>Total</td><td></td><td>' + total + '</td></tr>';
+  if (total > best) { best = total; try { localStorage.setItem('sushi-obby-mayhem-best', best); } catch (e) {} $('bestLine').textContent = 'New best score!'; setTimeout(sfx.best, 1100); }
   else $('bestLine').textContent = 'Best so far: ' + best;
   $('over').classList.remove('hidden'); $('touch').classList.add('hidden');
   sfx.over();
@@ -429,24 +434,34 @@ function spawnBottleArc(x, y, n, spread, rise, kind = 'bottle') {
   }
 }
 function spawnLine(x, y, n, kind = 'bottle') { for (let i = 0; i < n; i++) bottles.push({ x: x + i * 44, y, taken: false, bob: Math.random() * 6, kind }); }
-function bonusKind() { return stage === 2 ? pick(['bottle', 'bottle', 'edamame', 'edamame', 'sashimi']) : 'bottle'; }
+function bonusKind() { return stage === 2 ? pick(['bottle', 'bottle', 'bottle', 'bottle', 'sashimi', 'sashimi']) : 'bottle'; }
 
 function spawn() {
   const x = W + 120;
   const easy = dist < 2500;
   const types = stage === 2
-    ? ['bamboo', 'bamboo', 'blind', 'blind', 'tempura', 'knife', 'ramen', 'bottles', 'bottles', 'snake', 'snake', 'pit', 'pit']
-    : easy ? ['sushi', 'sushi', 'tempura', 'ramen', 'bottles', 'pit'] : ['sushi', 'sushi', 'tempura', 'knife', 'seaweed', 'ramen', 'bottles', 'seaweed', 'knife', 'chef', 'chef', 'pit', 'pit'];
+    ? ['bamboo', 'bamboo', 'blind', 'blind', 'tempura', 'knife', 'ramen', 'bottles', 'bottles', 'snake', 'snake', 'pit']
+    : easy ? ['sushi', 'sushi', 'tempura', 'ramen', 'bottles', 'pit'] : ['sushi', 'sushi', 'tempura', 'knife', 'seaweed', 'ramen', 'bottles', 'seaweed', 'knife', 'chef', 'chef', 'pit'];
   let type = pick(types);
   // never put a rusher right behind a duck-under obstacle, and never two rushers in a row
   const duckers = ['seaweed', 'blind'], rushers = ['chef', 'snake'];
   if (rushers.includes(type) && (duckers.includes(lastType) || rushers.includes(lastType))) type = stage === 2 ? 'bamboo' : 'sushi';
   if (duckers.includes(type) && duckers.includes(lastType)) type = 'bottles';
+  if (type === 'pit') { if (dist - lastPit < 3500) type = stage === 2 ? 'bamboo' : 'sushi'; else lastPit = dist; }
   lastType = type;
   // rare power star, floating high between obstacles
   if (dist > 1500 && Math.random() < .07) bottles.push({ x: x - 200, y: GROUND - 200, taken: false, bob: 0, kind: 'star' });
   // wasabi star: a green trap that speeds everything up for 4 seconds
-  if (dist > 2500 && Math.random() < .08) bottles.push({ x: x - 220, y: GROUND - rnd(60, 150), taken: false, bob: 0, kind: 'wasabi' });
+  if (dist > 2500 && Math.random() < .03 && dist - lastWasabi > 5000) { lastWasabi = dist; bottles.push({ x: x - 220, y: GROUND - rnd(60, 150), taken: false, bob: 0, kind: 'wasabi' }); }
+  // tarot card on a floating platform — needs a double jump
+  if (dist > 3000 && Math.random() < .035 && dist - lastTarot > 7000) {
+    lastTarot = dist;
+    const px = x - 260, py = GROUND - 195;
+    obstacles.push({ type: 'platform', x: px, w: 150, y: py });
+    bottles.push({ x: px + 75, y: py - 44, taken: false, bob: 0, kind: 'tarot' });
+  }
+  // edamame: a single rare pod, never more than one every ~40 m
+  if (stage === 2 && Math.random() < .072 && dist - lastEdamame > 3300) { lastEdamame = dist; bottles.push({ x: x - 240, y: GROUND - rnd(50, 120), taken: false, bob: 0, kind: 'edamame' }); }
   // gaps grow with the base speed so reaction time stays roughly constant
   let gap = rnd(380, 560) * (0.75 + (6 + Math.min(6.5, (dist - rampFrom) / 4500)) / 20);
   switch (type) {
@@ -549,6 +564,7 @@ function update(dt) {
   }
   if (!input.jumpHeld && p.vy < -5) p.vy = -5; // short hop when released early
 
+  p.prevY = p.y;
   p.vy += .62 * dt;
   p.y += p.vy * dt;
   const wasOnRamp = p.onRamp, wasAir = !p.grounded;
@@ -569,6 +585,10 @@ function update(dt) {
           for (let i = 0; i < 8; i++) particles.push({ x: o.x + 12, y: GROUND, vx: rnd(-3, 3), vy: rnd(-4, -1), life: 25, col: C.mat2, r: 3 });
         }
       }
+    }
+    if (o.type === 'platform' && p.vy >= 0 && p.x + 18 > o.x && p.x - 18 < o.x + o.w && p.prevY <= o.y + 2 && p.y >= o.y) {
+      if (!p.grounded) sfx.land();
+      p.y = o.y; p.vy = 0; p.grounded = true; p.jumps = 0;
     }
     if (o.type === 'ramen') {
       const cx = p.x;
@@ -593,7 +613,7 @@ function update(dt) {
   if (p.inv > 0) p.inv -= dt;
   for (const o of obstacles) {
     let box;
-    if (o.type === 'ramen') continue;
+    if (o.type === 'ramen' || o.type === 'platform') continue;
     if (o.type === 'knife') { if (o.phase === 'hang') continue; box = { x: o.x + 4, y: o.y, w: o.w - 8, h: o.h }; }
     else if (o.type === 'seaweed' || o.type === 'blind') box = { x: o.x + 6, y: 0, w: o.w - 12, h: o.h };
     else if (o.type === 'pit') {
@@ -634,7 +654,11 @@ function update(dt) {
     b.x -= speed * dt;
     if (!b.taken && Math.hypot(b.x - p.x, b.y - (p.y - p.h / 2)) < 34 + p.h / 4) {
       b.taken = true;
-      if (b.kind === 'wasabi') {
+      if (b.kind === 'tarot') {
+        addScore('tarot'); sfx.tarot(); shake = Math.max(shake, 3);
+        for (let i = 0; i < 24; i++) particles.push({ x: b.x, y: b.y, vx: rnd(-5, 5), vy: rnd(-6, 2), life: 45, col: pick(['#FFE066', '#C58BFF', '#fff']), r: 4 });
+        particles.push({ x: b.x, y: b.y - 10, vx: 0, vy: -1.2, life: 80, col: '#FFE066', text: 'SCORE ×' + multiplier() + '!' });
+      } else if (b.kind === 'wasabi') {
         p.rush = 240; addScore('wasabi'); sfx.boost(); shake = Math.max(shake, 5);
         for (let i = 0; i < 20; i++) particles.push({ x: b.x, y: b.y, vx: rnd(-5, 5), vy: rnd(-6, 2), life: 40, col: C.wasabi, r: 4 });
         particles.push({ x: b.x, y: b.y - 10, vx: 0, vy: -1.5, life: 60, col: C.wasabi, text: 'WASABI RUSH!' });
@@ -949,6 +973,25 @@ function drawObstacle(g, o) {
       g.beginPath(); g.moveTo(o.x + 14, 14); g.lineTo(o.x + 14, o.h); g.moveTo(o.x + o.w - 14, 14); g.lineTo(o.x + o.w - 14, o.h); g.stroke();
       break;
     }
+    case 'platform': {
+      const y = o.y + Math.sin(frame * .04 + o.x * .01) * 0;
+      if (stage === 2) {
+        // bamboo raft
+        g.fillStyle = '#4A3410'; g.beginPath(); g.roundRect(o.x - 2, y - 2, o.w + 4, 22, 8); g.fill();
+        for (let i = 0; i < o.w; i += 25) { g.fillStyle = i % 50 ? '#D9A84A' : '#C8963B'; g.beginPath(); g.roundRect(o.x + i + 2, y, 21, 18, 6); g.fill(); }
+        g.fillStyle = '#8A5A1E'; g.fillRect(o.x, y + 8, o.w, 3);
+      } else {
+        // neon sign ledge
+        g.fillStyle = C.deep; g.beginPath(); g.roundRect(o.x - 2, y - 2, o.w + 4, 22, 8); g.fill();
+        g.fillStyle = '#2F6FD6'; g.beginPath(); g.roundRect(o.x, y, o.w, 18, 6); g.fill();
+        g.fillStyle = C.neon; for (let i = 8; i < o.w - 8; i += 16) g.fillRect(o.x + i, y + 6, 8, 6);
+        g.fillStyle = C.pink; g.fillRect(o.x + 4, y + 18, o.w - 8, 3);
+      }
+      // little sparkles to hint that it's special
+      g.fillStyle = 'rgba(255,224,102,.8)';
+      for (let i = 0; i < 3; i++) { const sx = o.x + 20 + i * 55, sy = y - 8 - ((frame * .7 + i * 20) % 30); g.fillRect(sx, sy, 3, 3); }
+      break;
+    }
     case 'pit': {
       // hole in the ground with spikes at the bottom
       const depth = 44;
@@ -1014,6 +1057,22 @@ function drawSashimi(g, b) {
   g.fillStyle = 'rgba(255,255,255,.55)'; for (let i = 0; i < 3; i++) g.fillRect(b.x - 12 + i * 10, y - 10, 3, 16);
   g.fillStyle = C.wasabi; g.beginPath(); g.arc(b.x + 20, y + 4, 5, 0, Math.PI * 2); g.fill();
 }
+function drawTarot(g, b) {
+  const y = b.y + Math.sin(frame * .08) * 5, flip = Math.cos(frame * .05);
+  g.save(); g.translate(b.x, y); g.scale(Math.max(.15, Math.abs(flip)), 1);
+  g.fillStyle = 'rgba(197,139,255,.35)'; g.beginPath(); g.arc(0, 0, 34 + Math.sin(frame * .2) * 3, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#FFE066'; g.beginPath(); g.roundRect(-20, -30, 40, 60, 5); g.fill();
+  if (flip >= 0) {
+    g.fillStyle = '#3B1F6B'; g.beginPath(); g.roundRect(-16, -26, 32, 52, 4); g.fill();
+    g.fillStyle = '#FFE066'; g.beginPath(); for (let i = 0; i < 10; i++) { const r = i % 2 ? 5 : 12, a = i * Math.PI / 5 - Math.PI / 2; g.lineTo(Math.cos(a) * r, Math.sin(a) * r - 4); } g.closePath(); g.fill();
+    g.fillStyle = '#C58BFF'; g.beginPath(); g.arc(0, 15, 5, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#3B1F6B'; g.beginPath(); g.arc(2, 14, 4, 0, Math.PI * 2); g.fill();
+  } else {
+    g.fillStyle = '#5B2FA0'; g.beginPath(); g.roundRect(-16, -26, 32, 52, 4); g.fill();
+    g.strokeStyle = '#C58BFF'; g.lineWidth = 2; for (let i = -18; i < 22; i += 8) { g.beginPath(); g.moveTo(-14, i); g.lineTo(14, i + 6); g.stroke(); }
+  }
+  g.restore();
+}
 function drawStar(g, b, wasabi) {
   const y = b.y + Math.sin(frame * .12) * 6;
   g.save(); g.translate(b.x, y); g.rotate(frame * (wasabi ? .12 : .05));
@@ -1031,6 +1090,7 @@ function drawBottle(g, b) {
   if (b.kind === 'sashimi') return drawSashimi(g, b);
   if (b.kind === 'star') return drawStar(g, b);
   if (b.kind === 'wasabi') return drawStar(g, b, true);
+  if (b.kind === 'tarot') return drawTarot(g, b);
   const y = b.y + Math.sin(frame * .1 + b.bob) * 3;
   g.fillStyle = C.soy;
   g.beginPath(); g.roundRect(b.x - 11, y - 12, 22, 30, 7); g.fill();
@@ -1052,6 +1112,7 @@ function drawHUD(g) {
   g.font = '700 32px Fredoka, sans-serif'; g.textAlign = 'right'; g.textBaseline = 'middle';
   g.fillStyle = C.rice;
   g.fillText(score, W - 60, 40);
+  if (tally.tarot) { g.fillStyle = '#C58BFF'; g.beginPath(); g.roundRect(W - 60 - g.measureText(score).width - 70, 26, 58, 28, 14); g.fill(); g.fillStyle = C.rice; g.font = '700 20px Fredoka, sans-serif'; g.textAlign = 'center'; g.fillText('×' + multiplier(), W - 60 - g.measureText(score).width - 41 + 0, 40); g.font = '700 32px Fredoka, sans-serif'; }
   drawBottle(g, { x: W - 34, y: 40, bob: 0 });
   g.font = '500 18px Fredoka, sans-serif'; g.fillStyle = 'rgba(255,243,214,.8)';
   g.fillText(Math.floor(dist / 40) + ' m', W - 60, 72);
@@ -1080,7 +1141,7 @@ function draw() {
   ctx.save();
   if (shake > 0) ctx.translate(rnd(-shake, shake), rnd(-shake, shake));
   drawBackground(ctx);
-  const back = o => o.type === 'ramen' || o.type === 'seaweed' || o.type === 'blind' || o.type === 'pit';
+  const back = o => o.type === 'ramen' || o.type === 'seaweed' || o.type === 'blind' || o.type === 'pit' || o.type === 'platform';
   for (const o of obstacles) if (back(o)) drawObstacle(ctx, o);
   for (const b of bottles) drawBottle(ctx, b);
   for (const o of obstacles) if (!back(o)) drawObstacle(ctx, o);
