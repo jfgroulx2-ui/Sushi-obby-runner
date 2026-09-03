@@ -92,15 +92,14 @@
   #touch { position: absolute; inset: 0; pointer-events: none; }
   #touch.hidden { display: none; }
   .pad {
-    position: absolute; bottom: 20px; width: 118px; height: 118px; border-radius: 50%;
+    position: absolute; bottom: 20px; width: 104px; height: 104px; border-radius: 50%;
     border: 0; pointer-events: auto; font: inherit; font-weight: 700; font-size: 22px;
     color: var(--rice); opacity: .82;
   }
-  #btnDuck { left: 22px; background: #2F6FD6; box-shadow: 0 6px 0 #17418F; }
+  #btnSlow { left: 22px; background: #5FB4F0; box-shadow: 0 6px 0 #2F6FD6; color: #071A3F; }
+  #btnFast { left: 140px; background: #FFE066; box-shadow: 0 6px 0 #C9A400; color: #071A3F; }
+  #btnDuck { right: 140px; background: #2F6FD6; box-shadow: 0 6px 0 #17418F; }
   #btnJump { right: 22px; background: var(--salmon); box-shadow: 0 6px 0 #B8402F; }
-  .pad.small { width: 86px; height: 86px; bottom: 150px; font-size: 17px; }
-  #btnSlow { left: 38px; background: #5FB4F0; box-shadow: 0 6px 0 #2F6FD6; color: #071A3F; }
-  #btnFast { right: 38px; background: #FFE066; box-shadow: 0 6px 0 #C9A400; color: #071A3F; }
   .pad.down { transform: translateY(4px); box-shadow: none; opacity: 1; }
   @media (hover: hover) and (pointer: fine) { #touch { display: none; } }
 
@@ -139,8 +138,8 @@
   </div>
 
   <div id="touch" class="hidden">
-    <button class="pad small" id="btnSlow" aria-label="Slow down">Slow</button>
-    <button class="pad small" id="btnFast" aria-label="Speed up">Fast</button>
+    <button class="pad" id="btnSlow" aria-label="Slow down">Slow</button>
+    <button class="pad" id="btnFast" aria-label="Speed up">Fast</button>
     <button class="pad" id="btnDuck" aria-label="Duck">Duck</button>
     <button class="pad" id="btnJump" aria-label="Jump">Jump</button>
   </div>
@@ -207,6 +206,7 @@ const sfx = {
   boost: () => beep(200, .25, 'sawtooth', .05, 500),
   brake: () => beep(500, .25, 'sawtooth', .05, -300),
   best: () => [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => setTimeout(() => beep(f, .16, 'triangle', .09), i * 110)),
+  heart: () => [659, 784, 1047, 1319].forEach((f, i) => setTimeout(() => beep(f, .2, 'sine', .09), i * 90)),
   start: () => [392, 523, 659].forEach((f, i) => setTimeout(() => beep(f, .12, 'square', .06), i * 80)),
   tarot: () => [880, 1109, 1319, 1760, 2217].forEach((f, i) => setTimeout(() => beep(f, .3, 'sine', .07), i * 100)),
   jump: () => beep(420, .15, 'square', .06, 300),
@@ -368,19 +368,19 @@ let obstacles = [], bottles = [], particles = [], clouds = [];
 let speed = 6, dist = 0, score = 0, hearts = 3, frame = 0, spawnX = W + 300, shake = 0, overTimer = 0;
 let stage = 1, stageFlash = 0;
 // Every category is counted; the total score is the weighted sum
-const POINTS = { bottle: 1, edamame: 1, sashimi: 5, star: 10, wasabi: 5, stomp: 3, smash: 2, tarot: 0 };
+const POINTS = { bottle: 1, edamame: 1, sashimi: 5, star: 10, wasabi: 5, stomp: 3, smash: 2, heart: 5, tarot: 0 };
 function multiplier() { return Math.pow(2, tally.tarot || 0); }
 function finalScore() { return score * multiplier(); }
-const LABELS = { bottle: 'Soy sauce bottles', edamame: 'Edamame', sashimi: 'Sashimi', star: 'Power stars', wasabi: 'Wasabi stars', stomp: 'Chefs & snakes bonked', smash: 'Things smashed', tarot: 'Tarot cards' };
+const LABELS = { bottle: 'Soy sauce bottles', edamame: 'Edamame', sashimi: 'Sashimi', star: 'Power stars', wasabi: 'Wasabi stars', stomp: 'Chefs & snakes bonked', smash: 'Things smashed', heart: 'Hearts found', tarot: 'Tarot cards' };
 let tally = {};
 function addScore(kind) { tally[kind] = (tally[kind] || 0) + 1; score += POINTS[kind]; return POINTS[kind]; }
-let speedMul = 1, lastType = '', rampFrom = 0, lastWasabi = -1e9, lastEdamame = -1e9, lastPit = -1e9, lastTarot = -1e9;
+let speedMul = 1, lastType = '', rampFrom = 0, lastWasabi = -1e9, lastEdamame = -1e9, lastPit = -1e9, lastTarot = -1e9, lastWide = -1e9, lastHeart = -1e9;
 const STAGE2_AT = 100;
 
 function resetRun() {
   Object.assign(p, { y: GROUND, vy: 0, h: 76, duck: false, grounded: true, jumps: 0, inv: 0, onRamp: null });
   obstacles = []; bottles = []; particles = [];
-  speed = 6; dist = 0; score = 0; hearts = 3; frame = 0; spawnX = W + 400; shake = 0; overTimer = 0; stage = 1; stageFlash = 0; p.star = 0; p.rush = 0; tally = {}; speedMul = 1; lastType = ''; rampFrom = 0; lastWasabi = -1e9; lastEdamame = -1e9; lastPit = -1e9; lastTarot = -1e9;
+  speed = 6; dist = 0; score = 0; hearts = 3; frame = 0; spawnX = W + 400; shake = 0; overTimer = 0; stage = 1; stageFlash = 0; p.star = 0; p.rush = 0; tally = {}; speedMul = 1; lastType = ''; rampFrom = 0; lastWasabi = -1e9; lastEdamame = -1e9; lastPit = -1e9; lastTarot = -1e9; lastWide = -1e9; lastHeart = -1e9;
   input.jumpPressed = false;
 }
 function startGame(key) {
@@ -412,7 +412,9 @@ const skyline = []; let skyW = 0;
 for (let i = 0; i < 40; i++) { const bw = 50 + (i * 37) % 80, bh = 70 + (i * 53) % 180; skyline.push({ x: skyW, w: bw, h: bh, seed: i, roof: i % 3 }); skyW += bw + 6 + (i * 13) % 20; }
 const shops = []; let shopW = 0;
 const signs = ['寿司', 'ラーメン', '天ぷら', '居酒屋', '刺身', 'カラオケ'];
-for (let i = 0; i < 10; i++) { const sw = 200 + (i * 71) % 120; shops.push({ x: shopW, w: sw, sign: signs[i % signs.length], col: i % 2 ? 'pink' : 'neon', lanterns: 2 + i % 3 }); shopW += sw + 40; }
+const kinds = ['shop', 'shop', 'torii', 'shop', 'vending', 'tree', 'shop', 'arcade', 'shop', 'tree', 'vending', 'shop'];
+for (let i = 0; i < kinds.length; i++) { const k = kinds[i], sw = k === 'shop' || k === 'arcade' ? 200 + (i * 71) % 120 : k === 'torii' ? 160 : 140; shops.push({ x: shopW, w: sw, kind: k, sign: signs[i % signs.length], col: i % 2 ? 'pink' : 'neon', lanterns: 2 + i % 3 }); shopW += sw + 40; }
+const train = { x: W + 600, v: 2.2, cars: 4 };
 
 // Panda forest scenery
 const grove = []; let groveW = 0;
@@ -460,6 +462,14 @@ function spawn() {
     obstacles.push({ type: 'platform', x: px, w: 150, y: py });
     bottles.push({ x: px + 75, y: py - 44, taken: false, bob: 0, kind: 'tarot' });
   }
+  // extra heart: really rare, on a double platform (two double jumps to reach)
+  if (dist > 4000 && Math.random() < .02 && dist - lastHeart > 12000 && dist - lastTarot > 1500) {
+    lastHeart = dist; lastTarot = dist;
+    const px = x - 300;
+    obstacles.push({ type: 'platform', x: px, w: 150, y: GROUND - 195 });
+    obstacles.push({ type: 'platform', x: px + 190, w: 130, y: GROUND - 365 });
+    bottles.push({ x: px + 255, y: GROUND - 410, taken: false, bob: 0, kind: 'heart' });
+  }
   // edamame: a single rare pod, never more than one every ~40 m
   if (stage === 2 && Math.random() < .072 && dist - lastEdamame > 3300) { lastEdamame = dist; bottles.push({ x: x - 240, y: GROUND - rnd(50, 120), taken: false, bob: 0, kind: 'edamame' }); }
   // gaps grow with the base speed so reaction time stays roughly constant
@@ -495,10 +505,15 @@ function spawn() {
       gap += 140;
       break;
     case 'pit': {
-      const w = easy ? 110 : rnd(120, 175);
-      obstacles.push({ type, x, w, h: 0, spikes: Math.round(w / 22) });
-      if (Math.random() < .6) spawnBottleArc(x - 30, GROUND - 90, 4, w + 60, 60, bonusKind());
-      gap += 60;
+      const base = 6 + Math.min(6.5, (dist - rampFrom) / 4500);
+      // wide pit: about 1.3x the distance a single jump covers at the current speed, so a double jump is required
+      const wide = !easy && dist - lastWide > 9000 && Math.random() < .2;
+      const w = wide ? Math.round(base * 42 * 1.3) : easy ? 110 : rnd(120, 175);
+      if (wide) lastWide = dist;
+      obstacles.push({ type, x, w, h: 0, spikes: Math.round(w / 22), wide });
+      if (wide) spawnBottleArc(x - 30, GROUND - 150, 6, w + 60, 90, 'bottle');
+      else if (Math.random() < .6) spawnBottleArc(x - 30, GROUND - 90, 4, w + 60, 60, bonusKind());
+      gap += wide ? 160 : 60;
       break;
     }
     case 'snake':
@@ -654,7 +669,12 @@ function update(dt) {
     b.x -= speed * dt;
     if (!b.taken && Math.hypot(b.x - p.x, b.y - (p.y - p.h / 2)) < 34 + p.h / 4) {
       b.taken = true;
-      if (b.kind === 'tarot') {
+      if (b.kind === 'heart') {
+        addScore('heart'); sfx.heart();
+        const healed = hearts < 3; if (healed) hearts++;
+        for (let i = 0; i < 20; i++) particles.push({ x: b.x, y: b.y, vx: rnd(-4, 4), vy: rnd(-5, 1), life: 40, col: pick([C.tuna, '#fff', C.salmon]), r: 4 });
+        particles.push({ x: b.x, y: b.y - 10, vx: 0, vy: -1.2, life: 70, col: C.tuna, text: healed ? '+1 HEART' : 'FULL! +5' });
+      } else if (b.kind === 'tarot') {
         addScore('tarot'); sfx.tarot(); shake = Math.max(shake, 3);
         for (let i = 0; i < 24; i++) particles.push({ x: b.x, y: b.y, vx: rnd(-5, 5), vy: rnd(-6, 2), life: 45, col: pick(['#FFE066', '#C58BFF', '#fff']), r: 4 });
         particles.push({ x: b.x, y: b.y - 10, vx: 0, vy: -1.2, life: 80, col: '#FFE066', text: 'SCORE ×' + multiplier() + '!' });
@@ -727,15 +747,58 @@ function drawBackground(g) {
     g.fillStyle = C.mid; g.fillRect(bx, by, b.w, b.h + 90);
     if (b.roof === 1) { g.fillRect(bx + b.w / 2 - 3, by - 24, 6, 24); g.fillStyle = C.tuna; g.fillRect(bx + b.w / 2 - 2, by - 26, 4, 4); }
     if (b.roof === 2) { g.beginPath(); g.moveTo(bx, by); g.lineTo(bx + b.w / 2, by - 18); g.lineTo(bx + b.w, by); g.fill(); }
+    if (b.seed % 9 === 4) { // pagoda tiers
+      for (let t = 0; t < 3; t++) { const ty = by - t * 26, ex = 14 + t * 6; g.fillStyle = '#2C5FB8'; g.beginPath(); g.moveTo(bx - ex, ty); g.lineTo(bx + b.w / 2, ty - 22); g.lineTo(bx + b.w + ex, ty); g.fill(); g.fillStyle = C.mid; g.fillRect(bx + 6, ty - 22, b.w - 12, 22); }
+      g.fillStyle = C.tuna; g.fillRect(bx + b.w / 2 - 2, by - 90, 4, 16);
+    }
+    if (b.seed === 17) { // ferris wheel behind the block
+      const cx = bx + b.w / 2, cy = by - 70, r = 60; g.strokeStyle = '#5FB4F0'; g.lineWidth = 3; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke();
+      for (let k2 = 0; k2 < 8; k2++) { const a = frame * .01 + k2 * Math.PI / 4; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); g.stroke(); g.fillStyle = k2 % 2 ? C.pink : C.neon; g.beginPath(); g.arc(cx + Math.cos(a) * r, cy + Math.sin(a) * r, 5, 0, Math.PI * 2); g.fill(); }
+      g.fillStyle = C.mid; g.fillRect(bx, by, b.w, b.h + 90);
+    }
     g.fillStyle = C.neon;
     for (let wy = by + 12; wy < GROUND - 100; wy += 22) for (let wx = bx + 8; wx < bx + b.w - 10; wx += 16) if (((Math.round(wx - bx) * 7 + Math.round(wy - by) * 13 + b.seed) % 5) !== 0) g.fillRect(wx, wy, 8, 10);
   }
-  // street level: shop fronts with neon signs and lanterns
+  // elevated rail with a passing train
+  const ry = GROUND - 150;
+  g.fillStyle = '#123A80'; g.fillRect(0, ry, W, 8); for (let x = 30 - (dist * .45) % 120; x < W; x += 120) g.fillRect(x, ry, 10, 30);
+  if (state === 'play') { train.x -= train.v + speed * .45; if (train.x < -train.cars * 90 - 200) train.x = W + rnd(800, 3000); }
+  for (let c = 0; c < train.cars; c++) { const tx2 = train.x + c * 90; g.fillStyle = '#E8F4FF'; g.beginPath(); g.roundRect(tx2, ry - 30, 84, 30, c === 0 ? [12, 4, 4, 4] : 4); g.fill(); g.fillStyle = '#2F6FD6'; g.fillRect(tx2, ry - 14, 84, 5); g.fillStyle = C.neon; for (let wnd = 6; wnd < 80; wnd += 16) g.fillRect(tx2 + wnd, ry - 25, 10, 8); }
+  // street level: shop fronts, torii gates, vending machines, cherry trees, arcades
   const soff = (dist * .6) % shopW;
   for (const sh of shops) for (const k of [0, 1]) {
     const sx = sh.x - soff + k * shopW; if (sx > W || sx + sh.w < 0) continue;
     const top = GROUND - 120;
-    g.fillStyle = '#123A80'; g.fillRect(sx, top, sh.w, 120);
+    if (sh.kind === 'torii') {
+      g.fillStyle = C.tuna; g.fillRect(sx + 20, top - 10, 14, 130); g.fillRect(sx + sh.w - 34, top - 10, 14, 130);
+      g.fillRect(sx + 4, top - 30, sh.w - 8, 12); g.fillRect(sx + 20, top - 4, sh.w - 40, 8);
+      g.fillStyle = C.deep; g.fillRect(sx, top - 40, sh.w, 10);
+      for (let i = 0; i < 2; i++) { const lx = sx + 40 + i * (sh.w - 80); g.fillStyle = C.light; g.beginPath(); g.ellipse(lx, top + 30, 9, 12, 0, 0, Math.PI * 2); g.fill(); }
+      continue;
+    }
+    if (sh.kind === 'vending') {
+      for (let i = 0; i < 2; i++) { const vx = sx + 10 + i * 66, cols = [['#2F6FD6', C.neon], [C.tuna, '#fff']][i];
+        g.fillStyle = cols[0]; g.beginPath(); g.roundRect(vx, top + 20, 56, 100, 4); g.fill();
+        g.fillStyle = 'rgba(255,255,255,.85)'; g.fillRect(vx + 6, top + 28, 44, 44);
+        for (let r = 0; r < 2; r++) for (let c = 0; c < 4; c++) { g.fillStyle = ['#FF7AC8', '#FFE066', C.light, C.wasabi][(c + r + i) % 4]; g.fillRect(vx + 9 + c * 10.5, top + 32 + r * 20, 7, 14); }
+        g.fillStyle = cols[1]; g.fillRect(vx + 8, top + 80, 40, 6); g.fillStyle = C.deep; g.fillRect(vx + 10, top + 96, 36, 14);
+      }
+      g.fillStyle = 'rgba(127,230,255,.35)'; g.beginPath(); g.ellipse(sx + 70, top + 120, 80, 10, 0, 0, Math.PI * 2); g.fill();
+      continue;
+    }
+    if (sh.kind === 'tree') {
+      g.fillStyle = '#123A80'; g.fillRect(sx + 62, top + 50, 16, 70);
+      g.fillStyle = '#123A80'; g.fillRect(sx + 40, top + 60, 10, 30); g.fillRect(sx + 88, top + 56, 10, 30);
+      g.fillStyle = '#FF9AD5'; g.beginPath(); g.arc(sx + 70, top + 30, 44, 0, Math.PI * 2); g.arc(sx + 32, top + 52, 28, 0, Math.PI * 2); g.arc(sx + 110, top + 50, 30, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#FFC4E8'; g.beginPath(); g.arc(sx + 58, top + 22, 18, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#FF9AD5'; for (let i = 0; i < 6; i++) { const py = top + 60 + ((frame * .6 + i * 17) % 70), px = sx + 20 + i * 20 + Math.sin(frame * .05 + i) * 8; g.fillRect(px, py, 4, 4); }
+      continue;
+    }
+    g.fillStyle = sh.kind === 'arcade' ? '#0B1F52' : '#123A80'; g.fillRect(sx, top, sh.w, 120);
+    if (sh.kind === 'arcade') {
+      for (let i = 0; i < 4; i++) { const bx2 = sx + 24 + i * ((sh.w - 48) / 4); g.fillStyle = ['#FF7AC8', '#FFE066', C.neon, C.wasabi][(i + Math.floor(frame / 15)) % 4]; g.fillRect(bx2, top + 46, (sh.w - 48) / 4 - 10, 18); }
+      g.fillStyle = C.pink; g.font = '700 14px Fredoka, sans-serif'; g.textAlign = 'center'; g.fillText('ゲーム', sx + sh.w / 2, top + 84);
+    }
     g.fillStyle = C.light; g.fillRect(sx, top, sh.w, 8);
     g.fillStyle = '#1E4FA8'; for (let i = 0; i < sh.w; i += 28) g.fillRect(sx + i, top, 14, 8);
     g.fillStyle = 'rgba(127,230,255,.25)'; g.fillRect(sx + 20, top + 40, sh.w - 40, 66);
@@ -1006,6 +1069,13 @@ function drawObstacle(g, o) {
       // rim
       g.fillStyle = stage === 2 ? '#5C8F3A' : '#2F6FD6'; g.fillRect(o.x - 6, GROUND - 14, 6, 14); g.fillRect(o.x + o.w, GROUND - 14, 6, 14);
       g.fillStyle = C.tuna; for (let i = 0; i < 3; i++) g.fillRect(o.x + 10 + i * ((o.w - 20) / 2) - 3, GROUND - 22, 6, 6);
+      if (o.wide) {
+        // warning sign: "double jump!"
+        g.fillStyle = C.wood; g.fillRect(o.x - 24, GROUND - 74, 6, 60);
+        g.fillStyle = '#FFE066'; g.beginPath(); g.roundRect(o.x - 58, GROUND - 100, 74, 34, 6); g.fill();
+        g.fillStyle = C.soy; g.font = '700 15px Fredoka, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText('JUMP ×2', o.x - 21, GROUND - 83);
+      }
       break;
     }
     case 'ramen': {
@@ -1091,6 +1161,7 @@ function drawBottle(g, b) {
   if (b.kind === 'star') return drawStar(g, b);
   if (b.kind === 'wasabi') return drawStar(g, b, true);
   if (b.kind === 'tarot') return drawTarot(g, b);
+  if (b.kind === 'heart') { const y = b.y + Math.sin(frame * .1) * 5, sc = 1 + Math.sin(frame * .25) * .1; g.fillStyle = 'rgba(224,52,76,.3)'; g.beginPath(); g.arc(b.x, y, 30, 0, Math.PI * 2); g.fill(); g.save(); g.translate(b.x, y); g.scale(sc, sc); drawHeart(g, 0, 0, 18, true); g.fillStyle = 'rgba(255,255,255,.6)'; g.beginPath(); g.arc(-7, -8, 4, 0, Math.PI * 2); g.fill(); g.restore(); return; }
   const y = b.y + Math.sin(frame * .1 + b.bob) * 3;
   g.fillStyle = C.soy;
   g.beginPath(); g.roundRect(b.x - 11, y - 12, 22, 30, 7); g.fill();
