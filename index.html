@@ -38,7 +38,7 @@
 
   .screen {
     position: absolute; inset: 0; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 18px;
+    align-items: center; justify-content: center; gap: 12px;
     background: rgba(15,46,107,.62);
     transition: opacity .25s;
   }
@@ -77,10 +77,16 @@
   .btn:focus-visible { outline: 4px solid var(--sky); }
   .row { display: flex; gap: 14px; }
 
-  .score-big { color: var(--rice); font-size: 30px; margin: 0; text-align: center; }
-  .score-big b { font-size: 64px; display: block; color: var(--wasabi); line-height: 1; }
+  .score-big { color: var(--rice); font-size: 22px; margin: 0; text-align: center; }
+  .score-big b { font-size: 48px; display: block; color: #FFE066; line-height: 1; }
 
   .hint { color: var(--rice); font-size: 15px; opacity: .85; margin: 0; }
+  .tally { border-collapse: collapse; background: rgba(7,26,63,.45); border-radius: 16px; overflow: hidden; color: var(--rice); font-size: 17px; }
+  .tally td { padding: 5px 14px; }
+  .tally td:nth-child(2), .tally td:nth-child(3) { text-align: right; font-variant-numeric: tabular-nums; }
+  .tally td:nth-child(3) { color: var(--sky); }
+  .tally tr.total td { border-top: 2px solid rgba(255,243,214,.3); font-weight: 700; font-size: 20px; }
+  .tally tr.total td:nth-child(3) { color: #FFE066; }
 
   /* Touch controls */
   #touch { position: absolute; inset: 0; pointer-events: none; }
@@ -122,8 +128,9 @@
   </div>
 
   <div id="over" class="screen hidden">
-    <h1 class="title" style="font-size:56px">Sushi overload!</h1>
-    <p class="score-big">Soy bottles<b id="finalScore">0</b></p>
+    <h1 class="title" style="font-size:44px">Sushi overload!</h1>
+    <p class="score-big">Total score<b id="finalScore">0</b></p>
+    <table class="tally" id="tallyTable"></table>
     <p class="hint" id="bestLine"></p>
     <div class="row">
       <button class="btn" id="btnAgain">Run again</button>
@@ -359,13 +366,18 @@ const p = { x: 170, y: GROUND, vy: 0, w: 58, h: 76, duck: false, grounded: true,
 let obstacles = [], bottles = [], particles = [], clouds = [];
 let speed = 6, dist = 0, score = 0, hearts = 3, frame = 0, spawnX = W + 300, shake = 0, overTimer = 0;
 let stage = 1, stageFlash = 0;
+// Every category is counted; the total score is the weighted sum
+const POINTS = { bottle: 1, edamame: 1, sashimi: 5, star: 10, wasabi: 5, stomp: 3, smash: 2 };
+const LABELS = { bottle: 'Soy sauce bottles', edamame: 'Edamame', sashimi: 'Sashimi', star: 'Power stars', wasabi: 'Wasabi stars', stomp: 'Chefs & snakes bonked', smash: 'Things smashed' };
+let tally = {};
+function addScore(kind) { tally[kind] = (tally[kind] || 0) + 1; score += POINTS[kind]; return POINTS[kind]; }
 let speedMul = 1, lastType = '', rampFrom = 0;
 const STAGE2_AT = 100;
 
 function resetRun() {
   Object.assign(p, { y: GROUND, vy: 0, h: 76, duck: false, grounded: true, jumps: 0, inv: 0, onRamp: null });
   obstacles = []; bottles = []; particles = [];
-  speed = 6; dist = 0; score = 0; hearts = 3; frame = 0; spawnX = W + 400; shake = 0; overTimer = 0; stage = 1; stageFlash = 0; p.star = 0; p.rush = 0; speedMul = 1; lastType = ''; rampFrom = 0;
+  speed = 6; dist = 0; score = 0; hearts = 3; frame = 0; spawnX = W + 400; shake = 0; overTimer = 0; stage = 1; stageFlash = 0; p.star = 0; p.rush = 0; tally = {}; speedMul = 1; lastType = ''; rampFrom = 0;
   input.jumpPressed = false;
 }
 function startGame(key) {
@@ -377,6 +389,8 @@ function restart() { startGame(charKey); }
 function gameOver() {
   state = 'over'; overReady = false;
   $('finalScore').textContent = score;
+  const rows = Object.keys(POINTS).filter(k => tally[k]).map(k => '<tr><td>' + LABELS[k] + '</td><td>' + tally[k] + ' × ' + POINTS[k] + '</td><td>' + tally[k] * POINTS[k] + '</td></tr>').join('');
+  $('tallyTable').innerHTML = (rows || '<tr><td colspan="3">Nothing collected this time!</td></tr>') + '<tr class="total"><td>Total</td><td></td><td>' + score + '</td></tr>';
   if (score > best) { best = score; try { localStorage.setItem('sushi-obby-mayhem-best', best); } catch (e) {} $('bestLine').textContent = 'New best score!'; setTimeout(sfx.best, 1100); }
   else $('bestLine').textContent = 'Best so far: ' + best;
   $('over').classList.remove('hidden'); $('touch').classList.add('hidden');
@@ -595,14 +609,14 @@ function update(dt) {
     else box = { x: o.x + 6, y: GROUND - o.h + 6, w: o.w - 12, h: o.h - 6 };
     if (p.star > 0 && rectsHit(hb, box)) {
       // star power: smash through anything
-      o.dead = true; score += 2; sfx.stomp(); shake = Math.max(shake, 4);
+      o.dead = true; addScore('smash'); sfx.stomp(); shake = Math.max(shake, 4);
       for (let i = 0; i < 14; i++) particles.push({ x: box.x + box.w / 2, y: box.y + box.h / 2, vx: rnd(-6, 6), vy: rnd(-6, 2), life: 30, col: pick(['#FFE066', '#fff', C.light]), r: 4 });
       particles.push({ x: box.x + box.w / 2, y: box.y, vx: 0, vy: -1.5, life: 45, col: C.rice, text: '+2' });
       continue;
     }
     if ((o.type === 'chef' || o.type === 'snake') && rectsHit(hb, box) && p.vy > 0 && p.y < box.y + (o.type === 'snake' ? 26 : 34)) {
       // Mario-style bonk on the chef's hat
-      o.dead = true; score += 3; p.vy = -9.5; p.jumps = 1; sfx.stomp(); shake = Math.max(shake, 3);
+      o.dead = true; addScore('stomp'); p.vy = -9.5; p.jumps = 1; sfx.stomp(); shake = Math.max(shake, 3);
       for (let i = 0; i < 12; i++) particles.push({ x: o.x + o.w / 2, y: box.y + 20, vx: rnd(-4, 4), vy: rnd(-5, 1), life: 30, col: pick(['#fff', C.light, C.tuna]), r: 4 });
       particles.push({ x: o.x + o.w / 2, y: box.y, vx: 0, vy: -1.5, life: 45, col: C.rice, text: '+3' });
       continue;
@@ -621,15 +635,15 @@ function update(dt) {
     if (!b.taken && Math.hypot(b.x - p.x, b.y - (p.y - p.h / 2)) < 34 + p.h / 4) {
       b.taken = true;
       if (b.kind === 'wasabi') {
-        p.rush = 240; sfx.boost(); shake = Math.max(shake, 5);
+        p.rush = 240; addScore('wasabi'); sfx.boost(); shake = Math.max(shake, 5);
         for (let i = 0; i < 20; i++) particles.push({ x: b.x, y: b.y, vx: rnd(-5, 5), vy: rnd(-6, 2), life: 40, col: C.wasabi, r: 4 });
         particles.push({ x: b.x, y: b.y - 10, vx: 0, vy: -1.5, life: 60, col: C.wasabi, text: 'WASABI RUSH!' });
       } else if (b.kind === 'star') {
-        p.star = 240; sfx.star();
+        p.star = 240; addScore('star'); sfx.star();
         for (let i = 0; i < 20; i++) particles.push({ x: b.x, y: b.y, vx: rnd(-5, 5), vy: rnd(-6, 2), life: 40, col: '#FFE066', r: 4 });
         particles.push({ x: b.x, y: b.y - 10, vx: 0, vy: -1.5, life: 60, col: '#FFE066', text: 'STAR!' });
       } else {
-        const v = ITEM[b.kind].v; score += v; (b.kind === 'edamame' ? sfx.edamame : b.kind === 'sashimi' ? sfx.sashimi : sfx.collect)();
+        const v = addScore(b.kind); (b.kind === 'edamame' ? sfx.edamame : b.kind === 'sashimi' ? sfx.sashimi : sfx.collect)();
         const col = b.kind === 'edamame' ? C.wasabi : b.kind === 'sashimi' ? C.salmon : C.soy;
         for (let i = 0; i < 6; i++) particles.push({ x: b.x, y: b.y, vx: rnd(-3, 3), vy: rnd(-4, 0), life: 25, col, r: 3 });
         if (b.kind === 'edamame') {
@@ -637,6 +651,7 @@ function update(dt) {
           rampFrom = dist; p.rush = 0; sfx.brake();
           particles.push({ x: b.x, y: b.y - 10, vx: 0, vy: -1.5, life: 55, col: C.wasabi, text: 'SPEED RESET' });
         } else particles.push({ x: b.x, y: b.y - 10, vx: 0, vy: -1.5, life: 40, col: C.rice, text: '+' + v });
+        if (b.kind === 'edamame') particles.push({ x: b.x, y: b.y - 34, vx: 0, vy: -1.5, life: 55, col: C.rice, text: '+' + v });
       }
     }
   }
@@ -1040,6 +1055,15 @@ function drawHUD(g) {
   drawBottle(g, { x: W - 34, y: 40, bob: 0 });
   g.font = '500 18px Fredoka, sans-serif'; g.fillStyle = 'rgba(255,243,214,.8)';
   g.fillText(Math.floor(dist / 40) + ' m', W - 60, 72);
+  // per-category counts, small, under the distance
+  let hx = W - 24;
+  const mini = [['bottle', C.soy], ['edamame', '#5FAF4A'], ['sashimi', C.salmon], ['stomp', '#F5B7A0'], ['smash', '#FFE066']];
+  g.font = '700 16px Fredoka, sans-serif';
+  for (const [k, col] of mini) {
+    if (!tally[k]) continue;
+    g.fillStyle = C.rice; g.textAlign = 'right'; g.fillText(tally[k], hx, 98); hx -= 8 + g.measureText(tally[k]).width;
+    g.fillStyle = col; g.beginPath(); g.arc(hx - 6, 98, 6, 0, Math.PI * 2); g.fill(); hx -= 26;
+  }
   if (p.rush > 0) {
     g.fillStyle = 'rgba(7,26,63,.5)'; g.beginPath(); g.roundRect(W / 2 - 110, 50, 220, 20, 10); g.fill();
     g.fillStyle = C.wasabi; g.beginPath(); g.roundRect(W / 2 - 106, 54, 212 * (p.rush / 240), 12, 6); g.fill();
